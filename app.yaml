@@ -7,6 +7,14 @@ instance_class: F1
 automatic_scaling:
 
 handlers:
+- url: /googleed0eded6dfbf426c.html
+  static_files: googleed0eded6dfbf426c.html
+  upload: googleed0eded6dfbf426c.html
+- url: /cloud-datastore-export/.*
+  login: admin
+  script: _go_app
+- url: /cloud-datastore/gcs/object-change-notification
+  script: _go_app
 - url: /.*
   login: admin
   script: _go_app
