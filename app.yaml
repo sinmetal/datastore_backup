@@ -1,0 +1,12 @@
+application: sin4sandbox
+module: default
+version: datastorebackup
+runtime: go
+api_version: go1
+instance_class: F1
+automatic_scaling:
+
+handlers:
+- url: /.*
+  login: admin
+  script: _go_app
