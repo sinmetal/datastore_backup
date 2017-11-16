@@ -1,0 +1,5 @@
+cron:
+- description: Datastore Export
+  url: /cloud-datastore-export?outputStoragePath=gs://sin4sandbox-datastore-backup&kind=Item
+  schedule: every day 02:00
+  timezone: Asia/Tokyo

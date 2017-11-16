@@ -1,56 +1,41 @@
 package datastore_backup
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sinmetal/ds2bq"
 
-	"github.com/favclip/ucon"
-	"github.com/favclip/ucon/swagger"
-
 	"google.golang.org/appengine"
+	"google.golang.org/appengine/log"
 )
 
-func UseAppengineContext(b *ucon.Bubble) error {
-	b.Context = appengine.NewContext(b.R)
-	return b.Next()
-}
-
 func init() {
-	ucon.Middleware(UseAppengineContext)
-	ucon.Orthodox()
+	kindNames := []string{"Item"}
+	queueName := "datastore-to-bq"
+	path := "/tq/gcs/object-to-bq"
 
-	swPlugin := swagger.NewPlugin(&swagger.Options{
-		Object: &swagger.Object{
-			Info: &swagger.Info{
-				Title:   "ds2bq",
-				Version: "1",
-			},
-		},
-	})
-	ucon.Plugin(swPlugin)
+	f := func(w http.ResponseWriter, r *http.Request) {
+		c := appengine.NewContext(r)
 
-	{
-		s, err := ds2bq.NewGCSWatcherService(
-			ds2bq.GCSWatcherWithURLs(
-				"/cloud-datastore/gcs/object-change-notification",
-				"/tq/gcs/object-to-bq",
-			),
-			ds2bq.GCSWatcherWithAfterContext(func(c context.Context) (ds2bq.GCSWatcherOption, error) {
-				bucketName := appengine.AppID(c) + "-datastore-backup"
-				return ds2bq.GCSWatcherWithBackupBucketName(bucketName), nil
-			}),
-			ds2bq.GCSWatcherWithDatasetID("datastore_imports"),
-			ds2bq.GCSWatcherWithQueueName("datastore-to-bq"),
-			ds2bq.GCSWatcherWithTargetKindNames("Item"),
-		)
+		obj, err := ds2bq.DecodeGCSObject(r.Body)
 		if err != nil {
-			panic(err)
+			log.Errorf(c, "ds2bq: failed to decode request: %s", err)
+			return
 		}
-		s.SetupWithUcon()
+		defer r.Body.Close()
+
+		bucketName := appengine.AppID(c) + "-datastore-backup"
+		if !obj.IsImportTarget(c, r, bucketName, kindNames) {
+			return
+		}
+
+		err = ds2bq.ReceiveOCN(c, obj, queueName, path)
+		if err != nil {
+			log.Errorf(c, "ds2bq: failed to receive OCN: %s", err)
+			return
+		}
 	}
 
-	ucon.DefaultMux.Prepare()
-	http.Handle("/", ucon.DefaultMux)
+	http.HandleFunc("/cloud-datastore/gcs/object-change-notification", f) // from GCS, This API must not requires admin role.
+	http.HandleFunc("/tq/gcs/object-to-bq", ds2bq.ImportBigQueryHandleFunc("datastore_imports"))
 }
